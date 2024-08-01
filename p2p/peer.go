@@ -441,3 +441,43 @@ func createMConnection(
 		config,
 	)
 }
+
+func CreateOnReceive(
+	p Peer,
+	reactorsByCh map[byte]Reactor,
+	msgTypeByChID map[byte]proto.Message,
+) func(chID byte, msgBytes []byte) {
+	onReceive := func(chID byte, msgBytes []byte) {
+		reactor := reactorsByCh[chID]
+		if reactor == nil {
+			// Note that its ok to panic here as it's caught in the conn._recover,
+			// which does onPeerError.
+			panic(fmt.Sprintf("Unknown channel %X", chID))
+		}
+		mt := msgTypeByChID[chID]
+		msg := proto.Clone(mt)
+		err := proto.Unmarshal(msgBytes, msg)
+		if err != nil {
+			panic(fmt.Errorf("unmarshaling message: %s into type: %s", err, reflect.TypeOf(mt)))
+		}
+		// labels := []string{
+		// 	"peer_id", string(p.ID()),
+		// 	"chID", fmt.Sprintf("%#x", chID),
+		// }
+		if w, ok := msg.(Unwrapper); ok {
+			msg, err = w.Unwrap()
+			if err != nil {
+				panic(fmt.Errorf("unwrapping message: %s", err))
+			}
+		}
+		// p.metrics.PeerReceiveBytesTotal.With(labels...).Add(float64(len(msgBytes)))
+		// p.metrics.MessageReceiveBytesTotal.With("message_type", p.mlc.ValueToMetricLabel(msg)).Add(float64(len(msgBytes)))
+		reactor.Receive(Envelope{
+			ChannelID: chID,
+			Src:       p,
+			Message:   msg,
+		})
+	}
+
+	return onReceive
+}

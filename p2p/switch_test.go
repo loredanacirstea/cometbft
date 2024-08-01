@@ -697,11 +697,11 @@ func (et errorTransport) NetAddress() NetAddress {
 	panic("not implemented")
 }
 
-func (et errorTransport) Accept(peerConfig) (Peer, error) {
+func (et errorTransport) Accept(interface{}) (Peer, error) {
 	return nil, et.acceptErr
 }
 
-func (errorTransport) Dial(NetAddress, peerConfig) (Peer, error) {
+func (errorTransport) Dial(NetAddress, interface{}) (Peer, error) {
 	panic("not implemented")
 }
 

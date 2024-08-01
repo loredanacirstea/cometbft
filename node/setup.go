@@ -486,8 +486,8 @@ func createPEXReactorAndAddToSwitch(addrBook pex.AddrBook, config *cfg.Config,
 	return pexReactor
 }
 
-// startStateSync starts an asynchronous state sync process, then switches to block sync mode.
-func startStateSync(
+// StartStateSync starts an asynchronous state sync process, then switches to block sync mode.
+func StartStateSync(
 	ssR *statesync.Reactor,
 	bcR blockSyncReactor,
 	stateProvider statesync.StateProvider,
@@ -526,10 +526,12 @@ func startStateSync(
 			ssR.Logger.Error("Failed to bootstrap node with new state", "err", err)
 			return
 		}
-		err = blockStore.SaveSeenCommit(state.LastBlockHeight, commit)
-		if err != nil {
-			ssR.Logger.Error("Failed to store last seen commit", "err", err)
-			return
+		if blockStore != nil {
+			err = blockStore.SaveSeenCommit(state.LastBlockHeight, commit)
+			if err != nil {
+				ssR.Logger.Error("Failed to store last seen commit", "err", err)
+				return
+			}
 		}
 
 		err = bcR.SwitchToBlockSync(state)

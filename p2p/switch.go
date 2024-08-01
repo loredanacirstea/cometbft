@@ -630,6 +630,14 @@ func (sw *Switch) IsPeerPersistent(na *NetAddress) bool {
 	return false
 }
 
+func (sw *Switch) GetMsgTypeByChID() map[byte]proto.Message {
+	return sw.msgTypeByChID
+}
+
+func (sw *Switch) GetReactorsByCh() map[byte]Reactor {
+	return sw.reactorsByCh
+}
+
 func (sw *Switch) acceptRoutine() {
 	for {
 		p, err := sw.transport.Accept(peerConfig{
@@ -860,4 +868,20 @@ func (sw *Switch) addPeer(p Peer) error {
 	sw.Logger.Debug("Added peer", "peer", p)
 
 	return nil
+}
+
+func (sw *Switch) AddPeer(peer Peer) error {
+	return sw.peers.Add(peer)
+}
+
+func (sw *Switch) GetPeerConfig() peerConfig {
+	return peerConfig{
+		chDescs:       sw.chDescs,
+		onPeerError:   sw.StopPeerForError,
+		isPersistent:  sw.IsPeerPersistent,
+		reactorsByCh:  sw.reactorsByCh,
+		msgTypeByChID: sw.msgTypeByChID,
+		metrics:       sw.metrics,
+		mlc:           sw.mlc,
+	}
 }
