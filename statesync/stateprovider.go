@@ -53,6 +53,7 @@ func NewLightClientStateProvider(
 	servers []string,
 	trustOptions light.TrustOptions,
 	logger log.Logger,
+	loptions ...light.Option,
 ) (StateProvider, error) {
 	if len(servers) < 2 {
 		return nil, fmt.Errorf("at least 2 RPC servers are required, got %v", len(servers))
@@ -73,7 +74,11 @@ func NewLightClientStateProvider(
 	}
 
 	lc, err := light.NewClient(ctx, chainID, trustOptions, providers[0], providers[1:],
-		lightdb.New(dbm.NewMemDB(), ""), light.Logger(logger), light.MaxRetryAttempts(5))
+		lightdb.New(dbm.NewMemDB(), ""),
+		append([]light.Option{
+			light.Logger(logger),
+			light.MaxRetryAttempts(5),
+		}, loptions...)...)
 	if err != nil {
 		return nil, err
 	}

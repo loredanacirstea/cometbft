@@ -122,13 +122,84 @@ func VerifyAdjacent(
 		return err
 	}
 
-	// Ensure that +2/3 of new validators signed correctly.
-	if err := untrustedVals.VerifyCommitLight(trustedHeader.ChainID, untrustedHeader.Commit.BlockID,
-		untrustedHeader.Height, untrustedHeader.Commit); err != nil {
+	// 2) Ensure that +2/3 of validators signed correctly.
+	err := untrustedVals.VerifyCommitLight(trustedHeader.ChainID, untrustedHeader.Commit.BlockID,
+		untrustedHeader.Height, untrustedHeader.Commit)
+	if err != nil {
 		return ErrInvalidHeader{err}
 	}
 
 	return nil
+}
+
+func VerifyAdjacentCustom(
+	c *Client,
+	trustedHeader *types.SignedHeader, // height=X
+	untrustedHeader *types.SignedHeader, // height=X+1
+	untrustedVals *types.ValidatorSet, // height=X+1
+	trustingPeriod time.Duration,
+	now time.Time,
+	maxClockDrift time.Duration) error {
+
+	if untrustedHeader.Height != trustedHeader.Height+1 {
+		return errors.New("headers must be adjacent in height")
+	}
+
+	if HeaderExpired(trustedHeader, trustingPeriod, now) {
+		return ErrOldHeaderExpired{trustedHeader.Time.Add(trustingPeriod), now}
+	}
+
+	if err := verifyNewHeaderAndVals(
+		untrustedHeader, untrustedVals,
+		trustedHeader,
+		now, maxClockDrift); err != nil {
+		return ErrInvalidHeader{err}
+	}
+
+	// Check the validator hashes are the same
+	if !bytes.Equal(untrustedHeader.ValidatorsHash, trustedHeader.NextValidatorsHash) {
+		err := fmt.Errorf("expected old header next validators (%X) to match those from new header (%X)",
+			trustedHeader.NextValidatorsHash,
+			untrustedHeader.ValidatorsHash,
+		)
+		return err
+	}
+
+	// Ensure that +2/3 of new validators signed correctly.
+	var err error
+	if c.VerifyCommitLight != nil {
+		err = c.VerifyCommitLight(trustedHeader.ChainID, untrustedHeader.Commit.BlockID,
+			untrustedHeader.Height, untrustedHeader.Commit, untrustedVals)
+	} else {
+		// 2) Ensure that +2/3 of validators signed correctly.
+		err = untrustedVals.VerifyCommitLight(trustedHeader.ChainID, untrustedHeader.Commit.BlockID,
+			untrustedHeader.Height, untrustedHeader.Commit)
+	}
+	if err != nil {
+		return ErrInvalidHeader{err}
+	}
+
+	return nil
+}
+
+// Verify combines both VerifyAdjacent and VerifyNonAdjacent functions.
+func VerifyCustom(
+	c *Client,
+	trustedHeader *types.SignedHeader, // height=X
+	trustedVals *types.ValidatorSet, // height=X or height=X+1
+	untrustedHeader *types.SignedHeader, // height=Y
+	untrustedVals *types.ValidatorSet, // height=Y
+	trustingPeriod time.Duration,
+	now time.Time,
+	maxClockDrift time.Duration,
+	trustLevel cmtmath.Fraction) error {
+
+	if untrustedHeader.Height != trustedHeader.Height+1 {
+		return VerifyNonAdjacent(trustedHeader, trustedVals, untrustedHeader, untrustedVals,
+			trustingPeriod, now, maxClockDrift, trustLevel)
+	}
+
+	return VerifyAdjacentCustom(c, trustedHeader, untrustedHeader, untrustedVals, trustingPeriod, now, maxClockDrift)
 }
 
 // Verify combines both VerifyAdjacent and VerifyNonAdjacent functions.

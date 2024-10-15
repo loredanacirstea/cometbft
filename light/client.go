@@ -125,6 +125,12 @@ func MaxBlockLag(d time.Duration) Option {
 	}
 }
 
+func SetVerifyCommitLight(verify func(chainID string, blockID types.BlockID, height int64, commit *types.Commit, valset *types.ValidatorSet) error) Option {
+	return func(c *Client) {
+		c.VerifyCommitLight = verify
+	}
+}
+
 // Client represents a light client, connected to a single chain, which gets
 // light blocks from a primary provider, verifies them either sequentially or by
 // skipping some and stores them in a trusted store (usually, a local FS).
@@ -159,6 +165,8 @@ type Client struct {
 	quit chan struct{}
 
 	logger log.Logger
+
+	VerifyCommitLight func(chainID string, blockID types.BlockID, height int64, commit *types.Commit, valset *types.ValidatorSet) error
 }
 
 // NewClient returns a new light client. It returns an error if it fails to
@@ -377,8 +385,13 @@ func (c *Client) initializeWithTrustOptions(ctx context.Context, options TrustOp
 		return fmt.Errorf("expected header's hash %X, but got %X", options.Hash, l.Hash())
 	}
 
-	// 2) Ensure that +2/3 of validators signed correctly.
-	err = l.ValidatorSet.VerifyCommitLight(c.chainID, l.Commit.BlockID, l.Height, l.Commit)
+	if c.VerifyCommitLight != nil {
+		err = c.VerifyCommitLight(c.chainID, l.Commit.BlockID, l.Height, l.Commit, l.ValidatorSet)
+	} else {
+		// 2) Ensure that +2/3 of validators signed correctly.
+		err = l.ValidatorSet.VerifyCommitLight(c.chainID, l.Commit.BlockID, l.Height, l.Commit)
+	}
+
 	if err != nil {
 		return fmt.Errorf("invalid commit: %w", err)
 	}
@@ -641,7 +654,7 @@ func (c *Client) verifySequential(
 			"newHeight", interimBlock.Height,
 			"newHash", interimBlock.Hash())
 
-		err = VerifyAdjacent(verifiedBlock.SignedHeader, interimBlock.SignedHeader, interimBlock.ValidatorSet,
+		err = VerifyAdjacentCustom(c, verifiedBlock.SignedHeader, interimBlock.SignedHeader, interimBlock.ValidatorSet,
 			c.trustingPeriod, now, c.maxClockDrift)
 		if err != nil {
 			err := ErrVerificationFailed{From: verifiedBlock.Height, To: interimBlock.Height, Reason: err}
@@ -725,7 +738,7 @@ func (c *Client) verifySkipping(
 			"newHeight", blockCache[depth].Height,
 			"newHash", blockCache[depth].Hash())
 
-		err := Verify(verifiedBlock.SignedHeader, verifiedBlock.ValidatorSet, blockCache[depth].SignedHeader,
+		err := VerifyCustom(c, verifiedBlock.SignedHeader, verifiedBlock.ValidatorSet, blockCache[depth].SignedHeader,
 			blockCache[depth].ValidatorSet, c.trustingPeriod, now, c.maxClockDrift, c.trustLevel)
 		switch err.(type) {
 		case nil:

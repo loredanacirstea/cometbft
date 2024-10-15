@@ -495,6 +495,7 @@ func StartStateSync(
 	stateStore sm.Store,
 	blockStore *store.BlockStore,
 	state sm.State,
+	loptions ...light.Option,
 ) error {
 	ssR.Logger.Info("Starting state sync")
 
@@ -509,7 +510,7 @@ func StartStateSync(
 				Period: config.TrustPeriod,
 				Height: config.TrustHeight,
 				Hash:   config.TrustHashBytes(),
-			}, ssR.Logger.With("module", "light"))
+			}, ssR.Logger.With("module", "light"), loptions...)
 		if err != nil {
 			return fmt.Errorf("failed to set up light client state provider: %w", err)
 		}
